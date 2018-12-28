@@ -1,2 +1,2 @@
-# activerecord-arrow-mysql-adapter
-MySQL connection adapter using Apache Arrow internally
+# activerecord-arrow-adapters
+Connection adapters using Apache Arrow internally
