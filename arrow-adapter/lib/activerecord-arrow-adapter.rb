@@ -16,3 +16,4 @@
 
 require_relative 'activerecord-arrow-adapter/version'
 require_relative 'activerecord-arrow-adapter/arrow_result'
+require_relative 'activerecord-arrow-adapter/arrow_mysql2_adapter'
