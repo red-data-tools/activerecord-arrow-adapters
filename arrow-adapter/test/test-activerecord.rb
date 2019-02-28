@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,8 +17,19 @@
 # specific language governing permissions and limitations
 # under the License.
 
-require "activerecord-arrow-adapter"
-require "mysql2_arrow"
-
-require "test/unit"
-require "test/unit/rr"
+class ActiveRecordBaseTest < Test::Unit::TestCase
+  test('.arrow_mysql2_connection') do
+    connection_config = {
+      host: 'localhost',
+      username: 'root',
+      database: 'test',
+      adapter: 'arrow_mysql2'
+    }
+    ActiveRecord::Base.establish_connection(connection_config)
+    assert_rr do
+      mock.proxy(ActiveRecord::Base).arrow_mysql2_connection(connection_config)
+      assert_kind_of(ActiveRecordArrowAdapter::ArrowMysql2Adapter,
+                     ActiveRecord::Base.connection)
+    end
+  end
+end
