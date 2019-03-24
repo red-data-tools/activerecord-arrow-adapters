@@ -48,6 +48,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency("extpp")
   spec.add_runtime_dependency("native-package-installer")
   spec.add_runtime_dependency("pkg-config")
+  spec.add_runtime_dependency("mysql2")
 
   spec.add_development_dependency("bundler")
   spec.add_development_dependency("rake")
