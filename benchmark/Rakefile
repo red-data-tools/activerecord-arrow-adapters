@@ -1,0 +1,36 @@
+require 'bundler/setup'
+
+SCALES = [1000, 10000]
+if ENV['LIMIT']
+  LIMITS = [Integer(ENV['LIMIT'])]
+else
+  LIMITS = SCALES.product([1, 2, 3, 5]).map {|a, b| a * b }
+end
+
+if RUBY_PLATFORM.match?(/darwin/)
+  # Setting appropriate DYLD_LIBRARY_PATH for child processes
+  libdirs = ['arrow', 'arrow-glib'].map { |libname|
+    `pkg-config --variable=libdir #{libname}`.chomp
+  }.uniq
+  ENV['DYLD_LIBRARY_PATH'] = libdirs.join(':')
+end
+
+namespace :benchmark do
+  desc 'Run time benchmark'
+  task :time do
+    LIMITS.each do |limit|
+      sh "benchmark-driver", "--bundler", "-r", "time", "driver.yml"
+    end
+  end
+
+  desc 'Run memory benchmark'
+  task :memory do
+    LIMITS.each do |limit|
+      sh "benchmark-driver", "--bundler", "-r", "memory", "driver.yml"
+    end
+  end
+end
+
+desc 'Run benchmark'
+task :benchmark => 'benchmark:time'
+task :benchmark => 'benchmark:memory'
