@@ -61,14 +61,6 @@ module ActiveRecordArrowAdapter
       end
     end
 
-    def select_all(arel, name = nil, binds = [], preparable: nil, use_arrow: true)
-      with_arrow(use_arrow) do
-        super(arel, name, binds, preparable: preparable)
-      end
-    end
-
-    private
-
     def use_arrow?
       @use_arrow
     end

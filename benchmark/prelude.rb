@@ -1,3 +1,4 @@
+require "bundler/setup"
 require "activerecord-arrow-adapter"
 require "mysql2_arrow"
 
@@ -13,17 +14,13 @@ ActiveRecord::Base.establish_connection(
 class Mysql2Test < ActiveRecord::Base
   self.table_name = 'mysql2_test'
 
-  def self.test_pluck(n=10_000)
-    res = limit(n).pluck_by_arrow(
-      :int_test, :double_test, :varchar_test, :text_test
-    )
-    res.length == n
-  end
-
-  def self.test_pluck_by_arrow(n=10_000)
-    res = limit(n).pluck(
-      :int_test, :double_test, :varchar_test, :text_test
-    )
+  def self.test_pluck(n=10_000, use_arrow:)
+    res = connection.with_arrow(use_arrow) do
+      puts " (n=#{n}) "
+      limit(n).pluck(
+        :int_test, :double_test, :varchar_test, :text_test,
+      )
+    end
     res.length == n
   end
 end
