@@ -91,7 +91,7 @@ namespace mysql2_arrow {
     };
 
     class ResultWrapper {
-     public:
+    public:
       ResultWrapper(mysql2_result_wrapper* wrapper)
           : result_(wrapper->result),
             num_fields_(mysql_num_fields(result_)),
@@ -156,178 +156,178 @@ namespace mysql2_arrow {
           }
 
           switch (field_type) {
-            case MYSQL_TYPE_NULL:
-              rbb->GetFieldAs<arrow::NullBuilder>(i)->AppendNull();
-              continue;
+          case MYSQL_TYPE_NULL:
+            rbb->GetFieldAs<arrow::NullBuilder>(i)->AppendNull();
+            continue;
 
-            case MYSQL_TYPE_BIT:
-              if (castBool && field_lengths[i] == 1) {
-                rbb->GetFieldAs<arrow::BooleanBuilder>(i)->Append(*row[i] == 1);
-              } else {
-                const auto len = static_cast<int32_t>(field_lengths[i]); // FIXME overflow care
-                rbb->GetFieldAs<arrow::BinaryBuilder>(i)->Append(row[i], len);
+          case MYSQL_TYPE_BIT:
+            if (castBool && field_lengths[i] == 1) {
+              rbb->GetFieldAs<arrow::BooleanBuilder>(i)->Append(*row[i] == 1);
+            } else {
+              const auto len = static_cast<int32_t>(field_lengths[i]); // FIXME overflow care
+              rbb->GetFieldAs<arrow::BinaryBuilder>(i)->Append(row[i], len);
+            }
+            continue;
+
+          case MYSQL_TYPE_TINY:
+            if (castBool && field_lengths[i] == 1) {
+              rbb->GetFieldAs<arrow::BooleanBuilder>(i)->Append(*row[i] == 1);
+            } else if (is_unsigned) {
+              uint8_t val = static_cast<uint8_t>(std::strtoul(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::UInt8Builder>(i)->Append(val);
+            } else {
+              int8_t val = static_cast<int8_t>(std::strtol(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::Int8Builder>(i)->Append(val);
+            }
+            continue;
+
+          case MYSQL_TYPE_SHORT:
+          case MYSQL_TYPE_YEAR:
+            if (is_unsigned) {
+              uint16_t val = static_cast<uint16_t>(std::strtoul(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::UInt16Builder>(i)->Append(val);
+            } else {
+              int16_t val = static_cast<int16_t>(std::strtol(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::Int16Builder>(i)->Append(val);
+            }
+            continue;
+
+          case MYSQL_TYPE_LONG:
+          case MYSQL_TYPE_INT24:
+            if (is_unsigned) {
+              uint32_t val = static_cast<uint32_t>(std::strtoul(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::UInt32Builder>(i)->Append(val);
+            } else {
+              int32_t val = static_cast<int32_t>(std::strtol(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::Int32Builder>(i)->Append(val);
+            }
+            continue;
+
+          case MYSQL_TYPE_LONGLONG:
+            if (is_unsigned) {
+              uint64_t val = static_cast<uint64_t>(std::strtoull(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::UInt64Builder>(i)->Append(val);
+            } else {
+              int64_t val = static_cast<int64_t>(std::strtoll(row[i], nullptr, 10));
+              rbb->GetFieldAs<arrow::Int64Builder>(i)->Append(val);
+            }
+            continue;
+
+          case MYSQL_TYPE_DECIMAL:
+          case MYSQL_TYPE_NEWDECIMAL:
+            rbb->GetFieldAs<arrow::Decimal128Builder>(i)->Append(arrow::Decimal128(row[i]));
+            continue;
+
+          case MYSQL_TYPE_FLOAT:
+            rbb->GetFieldAs<arrow::FloatBuilder>(i)->Append(
+                std::strtof(row[i], nullptr));
+            continue;
+
+          case MYSQL_TYPE_DOUBLE:
+            rbb->GetFieldAs<arrow::DoubleBuilder>(i)->Append(
+                std::strtod(row[i], nullptr));
+            continue;
+
+          case MYSQL_TYPE_TIME:
+            {
+              unsigned int hour = 0, min = 0, sec = 0;
+              char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
+              int tokens = std::sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, usec_char);
+              if (tokens < 3) {
+                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
+                continue;
               }
-              continue;
 
-            case MYSQL_TYPE_TINY:
-              if (castBool && field_lengths[i] == 1) {
-                rbb->GetFieldAs<arrow::BooleanBuilder>(i)->Append(*row[i] == 1);
-              } else if (is_unsigned) {
-                uint8_t val = static_cast<uint8_t>(std::strtoul(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::UInt8Builder>(i)->Append(val);
-              } else {
-                int8_t val = static_cast<int8_t>(std::strtol(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::Int8Builder>(i)->Append(val);
+              // Note that we convert the TIME value to Timestamp
+              // because mysql2 converts it to Time object
+              arrow::util::date::year_month_day ymd(
+                  arrow::util::date::year(2000),
+                  arrow::util::date::month(1),
+                  arrow::util::date::day(1));
+              auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
+              auto tp = arrow::util::date::sys_days(ymd) + seconds;
+              auto duration = tp.time_since_epoch();
+              auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+              auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
+              rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
+            }
+            continue;
+
+          case MYSQL_TYPE_TIMESTAMP:
+          case MYSQL_TYPE_DATETIME:
+            {
+              unsigned int year = 0, month = 0, day = 0, hour = 0, min = 0, sec = 0;
+              char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
+              int tokens = std::sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s",
+                                       &year, &month, &day, &hour, &min, &sec, usec_char);
+              if (tokens < 6 /* msec might be empty */
+                  || year+month+day == 0) {
+                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
+                continue;
               }
-              continue;
-
-            case MYSQL_TYPE_SHORT:
-            case MYSQL_TYPE_YEAR:
-              if (is_unsigned) {
-                uint16_t val = static_cast<uint16_t>(std::strtoul(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::UInt16Builder>(i)->Append(val);
-              } else {
-                int16_t val = static_cast<int16_t>(std::strtol(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::Int16Builder>(i)->Append(val);
+              else if (month < 1 || day < 1) {
+                rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s",
+                         field(i).name_length, field(i).name, row[i]);
               }
-              continue;
 
-            case MYSQL_TYPE_LONG:
-            case MYSQL_TYPE_INT24:
-              if (is_unsigned) {
-                uint32_t val = static_cast<uint32_t>(std::strtoul(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::UInt32Builder>(i)->Append(val);
-              } else {
-                int32_t val = static_cast<int32_t>(std::strtol(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::Int32Builder>(i)->Append(val);
+              arrow::util::date::year_month_day ymd{
+                  arrow::util::date::year(year),
+                  arrow::util::date::month(month),
+                  arrow::util::date::day(day)};
+              auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
+              auto tp = arrow::util::date::sys_days(ymd) + seconds;
+              auto duration = tp.time_since_epoch();
+              auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+              auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
+              rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
+            }
+            continue;
+
+          case MYSQL_TYPE_DATE:
+          case MYSQL_TYPE_NEWDATE:
+            {
+              unsigned int year = 0, month = 0, day = 0;
+              int tokens = std::sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
+              if (tokens < 3 || year+month+day == 0) {
+                rbb->GetFieldAs<arrow::Date32Builder>(i)->AppendNull();
               }
-              continue;
-
-            case MYSQL_TYPE_LONGLONG:
-              if (is_unsigned) {
-                uint64_t val = static_cast<uint64_t>(std::strtoull(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::UInt64Builder>(i)->Append(val);
-              } else {
-                int64_t val = static_cast<int64_t>(std::strtoll(row[i], nullptr, 10));
-                rbb->GetFieldAs<arrow::Int64Builder>(i)->Append(val);
+              else if (month < 1 || day < 1) {
+                rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s", field(i).name_length, field(i).name, row[i]);
               }
-              continue;
+              arrow::util::date::year_month_day ymd{
+                  arrow::util::date::year(year),
+                  arrow::util::date::month(month),
+                  arrow::util::date::day(day)};
+              auto tp = arrow::util::date::sys_days(ymd);
+              auto duration = tp.time_since_epoch();
+              auto days = static_cast<int32_t>(duration.count());
+              rbb->GetFieldAs<arrow::Date32Builder>(i)->Append(days);
+            }
+            continue;
 
-            case MYSQL_TYPE_DECIMAL:
-            case MYSQL_TYPE_NEWDECIMAL:
-              rbb->GetFieldAs<arrow::Decimal128Builder>(i)->Append(arrow::Decimal128(row[i]));
-              continue;
+          case MYSQL_TYPE_TINY_BLOB:
+          case MYSQL_TYPE_MEDIUM_BLOB:
+          case MYSQL_TYPE_LONG_BLOB:
+          case MYSQL_TYPE_BLOB:
+          case MYSQL_TYPE_VAR_STRING:
+          case MYSQL_TYPE_VARCHAR:
+          case MYSQL_TYPE_STRING:
+            {
+              /* TODO: encoding */
+              const auto len = static_cast<int32_t>(field_lengths[i]); // FIXME overflow care
+              rbb->GetFieldAs<arrow::StringBuilder>(i)->Append(row[i], len);
+            }
+            continue;
 
-            case MYSQL_TYPE_FLOAT:
-              rbb->GetFieldAs<arrow::FloatBuilder>(i)->Append(
-                  std::strtof(row[i], nullptr));
-              continue;
+            // TODO: support following types
+          case MYSQL_TYPE_SET:
+          case MYSQL_TYPE_ENUM:
+          case MYSQL_TYPE_GEOMETRY:
+            /* TODO */
+            continue;
 
-            case MYSQL_TYPE_DOUBLE:
-              rbb->GetFieldAs<arrow::DoubleBuilder>(i)->Append(
-                  std::strtod(row[i], nullptr));
-              continue;
-
-            case MYSQL_TYPE_TIME:
-              {
-                unsigned int hour = 0, min = 0, sec = 0;
-                char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
-                int tokens = std::sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, usec_char);
-                if (tokens < 3) {
-                  rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
-                  continue;
-                }
-
-                // Note that we convert the TIME value to Timestamp
-                // because mysql2 converts it to Time object
-                arrow::util::date::year_month_day ymd(
-                    arrow::util::date::year(2000),
-                    arrow::util::date::month(1),
-                    arrow::util::date::day(1));
-                auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
-                auto tp = arrow::util::date::sys_days(ymd) + seconds;
-                auto duration = tp.time_since_epoch();
-                auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
-                auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
-                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
-              }
-              continue;
-
-            case MYSQL_TYPE_TIMESTAMP:
-            case MYSQL_TYPE_DATETIME:
-              {
-                unsigned int year = 0, month = 0, day = 0, hour = 0, min = 0, sec = 0;
-                char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
-                int tokens = std::sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s",
-                                         &year, &month, &day, &hour, &min, &sec, usec_char);
-                if (tokens < 6 /* msec might be empty */
-                    || year+month+day == 0) {
-                  rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
-                  continue;
-                }
-                else if (month < 1 || day < 1) {
-                  rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s",
-                           field(i).name_length, field(i).name, row[i]);
-                }
-
-                arrow::util::date::year_month_day ymd{
-                    arrow::util::date::year(year),
-                    arrow::util::date::month(month),
-                    arrow::util::date::day(day)};
-                auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
-                auto tp = arrow::util::date::sys_days(ymd) + seconds;
-                auto duration = tp.time_since_epoch();
-                auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
-                auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
-                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
-              }
-              continue;
-
-            case MYSQL_TYPE_DATE:
-            case MYSQL_TYPE_NEWDATE:
-              {
-                unsigned int year = 0, month = 0, day = 0;
-                int tokens = std::sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
-                if (tokens < 3 || year+month+day == 0) {
-                  rbb->GetFieldAs<arrow::Date32Builder>(i)->AppendNull();
-                }
-                else if (month < 1 || day < 1) {
-                  rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s", field(i).name_length, field(i).name, row[i]);
-                }
-                arrow::util::date::year_month_day ymd{
-                    arrow::util::date::year(year),
-                    arrow::util::date::month(month),
-                    arrow::util::date::day(day)};
-                auto tp = arrow::util::date::sys_days(ymd);
-                auto duration = tp.time_since_epoch();
-                auto days = static_cast<int32_t>(duration.count());
-                rbb->GetFieldAs<arrow::Date32Builder>(i)->Append(days);
-              }
-              continue;
-
-            case MYSQL_TYPE_TINY_BLOB:
-            case MYSQL_TYPE_MEDIUM_BLOB:
-            case MYSQL_TYPE_LONG_BLOB:
-            case MYSQL_TYPE_BLOB:
-            case MYSQL_TYPE_VAR_STRING:
-            case MYSQL_TYPE_VARCHAR:
-            case MYSQL_TYPE_STRING:
-              {
-                /* TODO: encoding */
-                const auto len = static_cast<int32_t>(field_lengths[i]); // FIXME overflow care
-                rbb->GetFieldAs<arrow::StringBuilder>(i)->Append(row[i], len);
-              }
-              continue;
-
-              // TODO: support following types
-            case MYSQL_TYPE_SET:
-            case MYSQL_TYPE_ENUM:
-            case MYSQL_TYPE_GEOMETRY:
-              /* TODO */
-              continue;
-
-            default:
-              continue;
+          default:
+            continue;
           }
         }
 
@@ -338,7 +338,7 @@ namespace mysql2_arrow {
         rb_raise(rb_eNotImpError, "Prepared statement is not supported");
       }
 
-     private:
+    private:
       VALUE mysql2_set_field_string_encoding(VALUE val, const MYSQL_FIELD& field) {
         /* if binary flag is set, respect its wishes */
         if (field.flags & BINARY_FLAG && field.charsetnr == 63) {
@@ -393,76 +393,76 @@ namespace mysql2_arrow {
         }
 
         switch (field_type) {
-          case MYSQL_TYPE_TINY:     /* TINYINT:   1 byte  */
-            if (castBool && field(i).length == 1) {
-              return arrow::boolean();
-            } else {
-              return is_unsigned ? arrow::uint8() : arrow::int8();
-            }
+        case MYSQL_TYPE_TINY:     /* TINYINT:   1 byte  */
+          if (castBool && field(i).length == 1) {
+            return arrow::boolean();
+          } else {
+            return is_unsigned ? arrow::uint8() : arrow::int8();
+          }
 
-          case MYSQL_TYPE_SHORT:    /* SMALLINT:  2 bytes */
-            return is_unsigned ? arrow::uint16() : arrow::int16();
+        case MYSQL_TYPE_SHORT:    /* SMALLINT:  2 bytes */
+          return is_unsigned ? arrow::uint16() : arrow::int16();
 
-          case MYSQL_TYPE_INT24:    /* MEDIUMINT: 3 bytes */
-          case MYSQL_TYPE_LONG:     /* INTEGER:   4 bytes */
-            return is_unsigned ? arrow::uint32() : arrow::int32();
+        case MYSQL_TYPE_INT24:    /* MEDIUMINT: 3 bytes */
+        case MYSQL_TYPE_LONG:     /* INTEGER:   4 bytes */
+          return is_unsigned ? arrow::uint32() : arrow::int32();
 
-          case MYSQL_TYPE_LONGLONG: /* BIGINT:    8 bytes */
-            return is_unsigned ? arrow::uint64() : arrow::int64();
+        case MYSQL_TYPE_LONGLONG: /* BIGINT:    8 bytes */
+          return is_unsigned ? arrow::uint64() : arrow::int64();
 
-          case MYSQL_TYPE_DECIMAL:  /* DECIMAL or NUMERIC */
-          case MYSQL_TYPE_NEWDECIMAL: /* high precision DECIMAL or NUMERIC */
-            return std::make_shared<arrow::Decimal128Type>(field(i).length, field(i).decimals);
+        case MYSQL_TYPE_DECIMAL:  /* DECIMAL or NUMERIC */
+        case MYSQL_TYPE_NEWDECIMAL: /* high precision DECIMAL or NUMERIC */
+          return std::make_shared<arrow::Decimal128Type>(field(i).length, field(i).decimals);
 
-          case MYSQL_TYPE_FLOAT:    /* FLOAT: 4 bytes */
-            return arrow::float32();
+        case MYSQL_TYPE_FLOAT:    /* FLOAT: 4 bytes */
+          return arrow::float32();
 
-          case MYSQL_TYPE_DOUBLE:   /* DOUBLE or REAL: 8 bytes */
-            return arrow::float64();
+        case MYSQL_TYPE_DOUBLE:   /* DOUBLE or REAL: 8 bytes */
+          return arrow::float64();
 
-          case MYSQL_TYPE_BIT:  /* 1 to 64 bits */
-            if (castBool && field(i).length == 1) {
-              return arrow::boolean();
-            }
-            return arrow::binary();
+        case MYSQL_TYPE_BIT:  /* 1 to 64 bits */
+          if (castBool && field(i).length == 1) {
+            return arrow::boolean();
+          }
+          return arrow::binary();
 
-          case MYSQL_TYPE_TIMESTAMP:
-            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+        case MYSQL_TYPE_TIMESTAMP:
+          return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
 
-          case MYSQL_TYPE_DATE:
-          case MYSQL_TYPE_NEWDATE:
-            /* TODO: need to reconsider about data type for DATE field */
-            return arrow::date32();
+        case MYSQL_TYPE_DATE:
+        case MYSQL_TYPE_NEWDATE:
+          /* TODO: need to reconsider about data type for DATE field */
+          return arrow::date32();
 
-          case MYSQL_TYPE_TIME:
-          case MYSQL_TYPE_DATETIME:
-            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
+        case MYSQL_TYPE_TIME:
+        case MYSQL_TYPE_DATETIME:
+          return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
 
-          case MYSQL_TYPE_YEAR:    /* YEAR: 1 byte */
-            return arrow::uint16();
+        case MYSQL_TYPE_YEAR:    /* YEAR: 1 byte */
+          return arrow::uint16();
 
-          case MYSQL_TYPE_STRING:     /* CHAR, BINARY */
-          case MYSQL_TYPE_VAR_STRING: /* VARCHAR, VARBINARY */
-          case MYSQL_TYPE_VARCHAR:
-            return arrow::utf8();
+        case MYSQL_TYPE_STRING:     /* CHAR, BINARY */
+        case MYSQL_TYPE_VAR_STRING: /* VARCHAR, VARBINARY */
+        case MYSQL_TYPE_VARCHAR:
+          return arrow::utf8();
 
-          case MYSQL_TYPE_TINY_BLOB:   /* TINYBLOB, TINYTEXT */
-          case MYSQL_TYPE_MEDIUM_BLOB: /* MEDIUMBLOB, MEDIUMTEXT */
-          case MYSQL_TYPE_LONG_BLOB:   /* LONGBLOB, LONGTEXT */
-          case MYSQL_TYPE_BLOB:        /* BLOB, TEXT */
-            return arrow::utf8();
+        case MYSQL_TYPE_TINY_BLOB:   /* TINYBLOB, TINYTEXT */
+        case MYSQL_TYPE_MEDIUM_BLOB: /* MEDIUMBLOB, MEDIUMTEXT */
+        case MYSQL_TYPE_LONG_BLOB:   /* LONGBLOB, LONGTEXT */
+        case MYSQL_TYPE_BLOB:        /* BLOB, TEXT */
+          return arrow::utf8();
 
-          case MYSQL_TYPE_SET:
-          case MYSQL_TYPE_ENUM:
-          case MYSQL_TYPE_GEOMETRY:
-            /* TODO */
-            return nullptr;
+        case MYSQL_TYPE_SET:
+        case MYSQL_TYPE_ENUM:
+        case MYSQL_TYPE_GEOMETRY:
+          /* TODO */
+          return nullptr;
 
-          case MYSQL_TYPE_NULL:
-            return arrow::null();
+        case MYSQL_TYPE_NULL:
+          return arrow::null();
 
-          default:
-            break;
+        default:
+          break;
         }
 
         return arrow::binary();
