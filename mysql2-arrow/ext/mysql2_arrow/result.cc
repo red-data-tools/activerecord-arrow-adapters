@@ -1,17 +1,19 @@
+#include <arrow/api.h>
+#include <arrow/util/decimal.h>
+#include <arrow/vendored/datetime.h>
+
+#include <arrow-glib/record-batch.hpp>
+
+#include <cstdlib>
+#include <iostream>
+
 #include "mysql2_arrow.hpp"
 
 #include <mysql2/mysql_enc_to_ruby.h>
 
 #include <ruby/thread.h>
 
-#include <arrow/api.h>
-#include <arrow/util/decimal.h>
-
-#include <arrow-glib/record-batch.hpp>
 #include <rbgobject.h>
-
-#include <cstdlib>
-#include <iostream>
 
 namespace mysql2_arrow {
   namespace {
@@ -117,6 +119,16 @@ namespace mysql2_arrow {
         return schema_;
       }
 
+      unsigned int usec_char_to_uint(char* msec_char, size_t len)
+      {
+        for (size_t i = 0; i < (len - 1); ++i) {
+          if (msec_char[i] == '\0') {
+            msec_char[i] = '0';
+          }
+        }
+        return (unsigned int)std::strtoul(msec_char, NULL, 10);
+      }
+
       bool fetch_row(std::unique_ptr<arrow::RecordBatchBuilder>& rbb) {
         MYSQL_ROW row = (MYSQL_ROW)rb_thread_call_without_gvl(
             (void* (*)(void*))nogvl_fetch_row, result_, RUBY_UBF_IO, 0);
@@ -135,7 +147,6 @@ namespace mysql2_arrow {
             if (field_type == MYSQL_TYPE_NULL) {
               rbb->GetFieldAs<arrow::NullBuilder>(i)->AppendNull();
             } else {
-as_binary:
               auto val = rb_str_new(row[i], field_lengths[i]);
               val = mysql2_set_field_string_encoding(val, field(i));
               const auto len = static_cast<int32_t>(RSTRING_LEN(val)); // FIXME overflow care
@@ -218,21 +229,81 @@ as_binary:
               continue;
 
             case MYSQL_TYPE_TIME:
-              /* TODO */
-              goto as_binary;
+              {
+                unsigned int hour = 0, min = 0, sec = 0;
+                char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
+                int tokens = std::sscanf(row[i], "%2u:%2u:%2u.%6s", &hour, &min, &sec, usec_char);
+                if (tokens < 3) {
+                  rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
+                  continue;
+                }
+
+                // Note that we convert the TIME value to Timestamp
+                // because mysql2 converts it to Time object
+                arrow::util::date::year_month_day ymd(
+                    arrow::util::date::year(2000),
+                    arrow::util::date::month(1),
+                    arrow::util::date::day(1));
+                auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
+                auto tp = arrow::util::date::sys_days(ymd) + seconds;
+                auto duration = tp.time_since_epoch();
+                auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+                auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
+                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
+              }
+              continue;
 
             case MYSQL_TYPE_TIMESTAMP:
-              /* TODO */
-              goto as_binary;
-
             case MYSQL_TYPE_DATETIME:
-              /* TODO */
-              goto as_binary;
+              {
+                unsigned int year = 0, month = 0, day = 0, hour = 0, min = 0, sec = 0;
+                char usec_char[7] = {'0', '0', '0', '0', '0', '0', '\0'};
+                int tokens = std::sscanf(row[i], "%4u-%2u-%2u %2u:%2u:%2u.%6s",
+                                         &year, &month, &day, &hour, &min, &sec, usec_char);
+                if (tokens < 6 /* msec might be empty */
+                    || year+month+day == 0) {
+                  rbb->GetFieldAs<arrow::TimestampBuilder>(i)->AppendNull();
+                  continue;
+                }
+                else if (month < 1 || day < 1) {
+                  rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s",
+                           field(i).name_length, field(i).name, row[i]);
+                }
+
+                arrow::util::date::year_month_day ymd{
+                    arrow::util::date::year(year),
+                    arrow::util::date::month(month),
+                    arrow::util::date::day(day)};
+                auto seconds = std::chrono::duration<int64_t>(3600U * hour + 60U * min + sec);
+                auto tp = arrow::util::date::sys_days(ymd) + seconds;
+                auto duration = tp.time_since_epoch();
+                auto value = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+                auto usec = usec_char_to_uint(usec_char, sizeof(usec_char));
+                rbb->GetFieldAs<arrow::TimestampBuilder>(i)->Append(value + usec);
+              }
+              continue;
 
             case MYSQL_TYPE_DATE:
             case MYSQL_TYPE_NEWDATE:
-              /* TODO */
-              goto as_binary;
+              {
+                unsigned int year = 0, month = 0, day = 0;
+                int tokens = std::sscanf(row[i], "%4u-%2u-%2u", &year, &month, &day);
+                if (tokens < 3 || year+month+day == 0) {
+                  rbb->GetFieldAs<arrow::Date32Builder>(i)->AppendNull();
+                }
+                else if (month < 1 || day < 1) {
+                  rb_raise(eMysql2Error, "Invalid date in field '%.*s': %s", field(i).name_length, field(i).name, row[i]);
+                }
+                arrow::util::date::year_month_day ymd{
+                    arrow::util::date::year(year),
+                    arrow::util::date::month(month),
+                    arrow::util::date::day(day)};
+                auto tp = arrow::util::date::sys_days(ymd);
+                auto duration = tp.time_since_epoch();
+                auto days = static_cast<int32_t>(duration.count());
+                rbb->GetFieldAs<arrow::Date32Builder>(i)->Append(days);
+              }
+              continue;
 
             case MYSQL_TYPE_TINY_BLOB:
             case MYSQL_TYPE_MEDIUM_BLOB:
@@ -364,12 +435,8 @@ as_binary:
             return arrow::date32();
 
           case MYSQL_TYPE_TIME:
-            /* TODO: need to reconsider about data type for TIME field */
-            return std::make_shared<arrow::Time64Type>(arrow::TimeUnit::MICRO);
-
           case MYSQL_TYPE_DATETIME:
-            /* TODO: need to reconsider about data type for DATETIME field */
-            return std::make_shared<arrow::Time64Type>(arrow::TimeUnit::MICRO);
+            return std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
 
           case MYSQL_TYPE_YEAR:    /* YEAR: 1 byte */
             return arrow::uint16();
