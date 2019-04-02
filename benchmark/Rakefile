@@ -19,6 +19,8 @@ namespace :benchmark do
   desc 'Run time benchmark'
   task :time do
     LIMITS.each do |limit|
+      ENV['LIMIT'] = limit.to_s
+      puts "LIMIT=#{limit}"
       sh "benchmark-driver", "--bundler", "-r", "time", "driver.yml"
     end
   end
@@ -26,6 +28,8 @@ namespace :benchmark do
   desc 'Run memory benchmark'
   task :memory do
     LIMITS.each do |limit|
+      ENV['LIMIT'] = limit.to_s
+      puts "LIMIT=#{limit}"
       sh "benchmark-driver", "--bundler", "-r", "memory", "driver.yml"
     end
   end
