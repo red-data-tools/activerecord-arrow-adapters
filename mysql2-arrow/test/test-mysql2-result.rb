@@ -46,12 +46,35 @@ class Mysql2ResultTest < Test::Unit::TestCase
   end
 
   test("#to_arrow") do
-    record_batch = @result.to_arrow
-    assert_kind_of(Arrow::RecordBatch,
-                   record_batch)
+    table = @result.to_arrow
+    assert_kind_of(Arrow::Table,
+                   table)
     assert_equal(30_000,
-                 record_batch.n_rows)
+                 table.n_rows)
     assert_equal(14,
-                 record_batch.n_columns)
+                 table.n_columns)
+  end
+
+  test("#raw_records") do
+    query = <<~SQL
+      SELECT
+        tiny_int_test
+        , small_int_test
+        , medium_int_test
+        , int_test
+        , big_int_test
+        , double_test
+        , decimal_test
+        , varchar_test
+        , binary_test
+        , tiny_text_test
+        , text_test
+        , medium_text_test
+        , long_text_test
+      FROM mysql2_test LIMIT 10
+    SQL
+
+    assert_equal(@client.query(query, as: :array).to_a,
+                 @client.query(query).to_arrow.raw_records)
   end
 end

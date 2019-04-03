@@ -31,9 +31,29 @@
   mysql2_result_wrapper *wrapper; \
   Data_Get_Struct(self, mysql2_result_wrapper, wrapper);
 
+#include <arrow/status.h>
+#include <arrow/table.h>
+
+#include <memory>
+
 namespace mysql2_arrow {
   extern VALUE mMysql2Arrow;
   extern VALUE eMysql2Error;
+
+  class MysqlResultReader {
+  public:
+    virtual ~MysqlResultReader() = default;
+
+    virtual arrow::Status Read(std::shared_ptr<arrow::Table>* out) = 0;
+
+    static arrow::Status Make(arrow::MemoryPool* pool, MYSQL_STMT* stmt, MYSQL_RES* result,
+                       bool cast, bool castBool, bool parallel, long batch_size,
+                       std::shared_ptr<MysqlResultReader>* out);
+
+    static arrow::Status Make(arrow::MemoryPool* pool, MYSQL_RES* result, bool cast,
+                       bool castBool, bool parallel, long batch_size,
+                       std::shared_ptr<MysqlResultReader>* out);
+  };
 
   void init_mysql2_result_extension();
 }
