@@ -1,0 +1,7 @@
+Gemfile.lock
+Makefile
+mkmf.log
+*.o
+*.obj
+*.so
+*.bundle
