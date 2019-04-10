@@ -4,11 +4,13 @@ require "mysql2_arrow"
 
 $VERBOSE = nil
 
+batch_size = Integer(ENV['BATCH_SIZE'] || 0)
 ActiveRecord::Base.establish_connection(
   host: 'localhost',
   username: 'root',
   database: 'test',
-  adapter: 'arrow_mysql2'
+  adapter: 'arrow_mysql2',
+  batch_size: batch_size
 )
 
 class Mysql2Test < ActiveRecord::Base
