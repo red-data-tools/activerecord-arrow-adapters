@@ -647,9 +647,11 @@ namespace red_arrow {
             const auto column = table.column(i).get();
             const auto chunked_array = column->data();
             column_index_ = i;
+            row_offset_ = 0;
             for (const auto array : chunked_array->chunks()) {
               check_status(array->Accept(this),
                            "[raw-records]");
+              row_offset_ += array->length();
             }
           }
           return Qnil;
@@ -707,18 +709,19 @@ namespace red_arrow {
       void convert(const ArrayType& array) {
         const auto n = array.length();
         if (array.null_count() > 0) {
-          for (int64_t i = 0; i < n; ++i) {
+          for (int64_t i = 0, ii = row_offset_; i < n; ++i, ++ii) {
             auto value = Qnil;
             if (!array.IsNull(i)) {
               value = convert_value(array, i);
             }
-            auto record = rb_ary_entry(records_, i);
+            auto record = rb_ary_entry(records_, ii);
             rb_ary_store(record, column_index_, value);
           }
         } else {
-          for (int64_t i = 0; i < n; ++i) {
-            auto record = rb_ary_entry(records_, i);
-            rb_ary_store(record, column_index_, convert_value(array, i));
+          for (int64_t i = 0, ii = row_offset_; i < n; ++i, ++i) {
+            auto record = rb_ary_entry(records_, ii);
+            auto value = convert_value(array, i);
+            rb_ary_store(record, column_index_, value);
           }
         }
       }
@@ -734,6 +737,9 @@ namespace red_arrow {
 
       // The current column index.
       int column_index_;
+
+      // The current row offset.
+      int64_t row_offset_;
 
       // The number of columns.
       const int n_columns_;
