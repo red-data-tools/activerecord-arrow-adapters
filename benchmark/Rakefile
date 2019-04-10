@@ -21,7 +21,7 @@ namespace :benchmark do
     LIMITS.each do |limit|
       ENV['LIMIT'] = limit.to_s
       puts "LIMIT=#{limit}"
-      sh "benchmark-driver", "--bundler", "-r", "time", "driver.yml"
+      sh "benchmark-driver", "--bundler", "-r", "time", "-o", "simple", "driver.yml"
     end
   end
 
@@ -30,7 +30,7 @@ namespace :benchmark do
     LIMITS.each do |limit|
       ENV['LIMIT'] = limit.to_s
       puts "LIMIT=#{limit}"
-      sh "benchmark-driver", "--bundler", "-r", "memory", "driver.yml"
+      sh "benchmark-driver", "--bundler", "-r", "memory", "-o", "simple", "driver.yml"
     end
   end
 end
