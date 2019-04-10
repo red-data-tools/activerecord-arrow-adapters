@@ -195,13 +195,23 @@ namespace mysql2_arrow {
   private:
     using BaseClass = BaseMysqlResultReader<ThreadedMysqlStoredResultReader>;
 
+    long detect_batch_size(arrow::internal::ThreadPool* thread_pool,
+                           unsigned long n_rows, long batch_size) {
+      if (batch_size > 0) {
+        return batch_size;
+      }
+
+      const auto thread_pool_capacity = thread_pool->GetCapacity();
+      return (n_rows + thread_pool_capacity - 1) / thread_pool_capacity;
+    }
+
   public:
     ThreadedMysqlStoredResultReader(arrow::MemoryPool* pool, MYSQL_RES* result,
                                     arrow::internal::ThreadPool* thread_pool,
                                     bool cast, bool cast_bool, long batch_size)
         : BaseClass(pool, result, cast, cast_bool),
           thread_pool_(thread_pool),
-          batch_size_(batch_size),
+          batch_size_(detect_batch_size(thread_pool, mysql_num_rows(result), batch_size)),
           finished_(false) {}
 
     Status InitReader() {
