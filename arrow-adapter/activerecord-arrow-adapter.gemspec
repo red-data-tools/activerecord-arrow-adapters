@@ -36,7 +36,7 @@ Gem::Specification.new do |spec|
   spec.description = "ActiveRecord connection adapter for Apache Arrow"
   spec.license = "Apache-2.0"
 
-  spec.add_runtime_dependency("red-arrow", "> 0.12.0")
+  spec.add_runtime_dependency("red-arrow", ">= 0.13.0")
   spec.add_runtime_dependency("activerecord", ">= 5.2.2")
 
   spec.add_development_dependency("bundler")
