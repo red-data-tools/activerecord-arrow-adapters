@@ -385,7 +385,7 @@ namespace mysql2_arrow {
                                &year, &month, &day, &hour, &min, &sec, usec_char);
           if (tokens < 6 // usec might be empty
               || year + month + day == 0) {
-            builder->AppendNull();
+            RETURN_NOT_OK(builder->AppendNull());
             continue;
           } else if (month < 1 || day < 1) {
             return Status::Invalid("Invalid date in field '", fields_[i].name,
