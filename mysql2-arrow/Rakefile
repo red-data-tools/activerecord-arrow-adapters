@@ -20,6 +20,10 @@
 require "bundler/gem_helper"
 require "rake/clean"
 
+Dir["tasks/*.rake"].each do |rakefile|
+  load File.expand_path(rakefile)
+end
+
 base_dir = File.join(__dir__)
 
 helper = Bundler::GemHelper.new(base_dir)
