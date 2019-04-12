@@ -20,7 +20,7 @@ namespace :benchmark do
   task :time do
     LIMITS.each do |limit|
       ENV['LIMIT'] = limit.to_s
-      puts "LIMIT=#{limit}"
+      puts "LIMIT=#{limit} BATCH_SIZE=#{ENV['BATCH_SIZE'] || 0} TIMESTAMP=#{Time.now.strftime('%Y%m%d%H%M%S')}"
       sh "benchmark-driver", "--bundler", "-r", "time", "-o", "simple", "driver.yml"
     end
   end
@@ -29,8 +29,28 @@ namespace :benchmark do
   task :memory do
     LIMITS.each do |limit|
       ENV['LIMIT'] = limit.to_s
-      puts "LIMIT=#{limit}"
+      puts "LIMIT=#{limit} BATCH_SIZE=#{ENV['BATCH_SIZE'] || 0} TIMESTAMP=#{Time.now.strftime('%Y%m%d%H%M%S')}"
       sh "benchmark-driver", "--bundler", "-r", "memory", "-o", "simple", "driver.yml"
+    end
+  end
+
+  namespace :mt do
+    desc 'Run time benchmark with multiple threads'
+    task :time do
+      LIMITS.each do |limit|
+        ENV['LIMIT'] = limit.to_s
+        puts "LIMIT=#{limit} BATCH_SIZE=#{ENV['BATCH_SIZE'] || 0} TIMESTAMP=#{Time.now.strftime('%Y%m%d%H%M%S')} MT"
+        sh "benchmark-driver", "--bundler", "-r", "time", "-o", "simple", "driver-mt.yml"
+      end
+    end
+
+    desc 'Run memory benchmark with multiple threads'
+    task :memory do
+      LIMITS.each do |limit|
+        ENV['LIMIT'] = limit.to_s
+        puts "LIMIT=#{limit} BATCH_SIZE=#{ENV['BATCH_SIZE'] || 0} TIMESTAMP=#{Time.now.strftime('%Y%m%d%H%M%S')} MT"
+        sh "benchmark-driver", "--bundler", "-r", "memory", "-o", "simple", "driver-mt.yml"
+      end
     end
   end
 end

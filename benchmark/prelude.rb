@@ -10,7 +10,8 @@ ActiveRecord::Base.establish_connection(
   username: 'root',
   database: 'test',
   adapter: 'arrow_mysql2',
-  batch_size: batch_size
+  batch_size: batch_size,
+  pool: 10
 )
 
 class Mysql2Test < ActiveRecord::Base
