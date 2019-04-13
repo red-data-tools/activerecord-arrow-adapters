@@ -48,6 +48,7 @@ Gem::Specification.new do |spec|
   spec.add_runtime_dependency("extpp")
   spec.add_runtime_dependency("native-package-installer")
   spec.add_runtime_dependency("pkg-config")
+  spec.add_runtime_dependency("red-arrow", "> 0.13.0")
   spec.add_runtime_dependency("pg")
 
   spec.add_development_dependency("bundler")
