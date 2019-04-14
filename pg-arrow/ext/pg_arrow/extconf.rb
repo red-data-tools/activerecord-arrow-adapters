@@ -43,4 +43,36 @@ end
   add_depend_package_path(name, source_dir, build_dir)
 end
 
+pg_includedir, pg_libdir = dir_config('pg')
+unless pg_includedir && pg_libdir
+  pg_config = with_config('pg_config')
+  pg_config = find_executable('pg_config') if pg_config.nil? || pg_config == true
+  pg_includedir = `#{pg_config} --includedir`.chomp
+  pg_libdir = `#{pg_config} --libdir`.chomp
+  pg_libs = `#{pg_config} --libs`.chomp
+  $INCFLAGS << " " << "-I#{pg_includedir}"
+  $LDFLAGS << " " << "-L#{pg_libdir}"
+end
+
+unless have_header('libpq-fe.h') &&
+       have_header('libpq/libpq-fs.h') &&
+       have_header('pg_config_manual.h')
+  $stderr.puts "Unable to find header files of PostgreSQL client library"
+  abort
+end
+
+unless have_library('pq', 'PQconnectdb', ['libpq-fe.h']) ||
+       have_library('libpq', 'PQconnectdb', ['libpq-fe.h']) ||
+       have_library('ms/libpq', 'PQconnectdb', ['libpq-fe.h'])
+  $stderr.puts "Unable to find PostgreSQL client library"
+  abort
+end
+
+checking_for(checking_message("ruby-pg"), "%s") do
+  pg_spec = Gem::Specification.find_by_name("pg")
+  $INCFLAGS << " " << "-I#{pg_spec.gem_dir}/ext"
+  pg_spec.version
+end
+
+
 create_makefile('pg_arrow')
