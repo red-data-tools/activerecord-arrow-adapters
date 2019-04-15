@@ -1,4 +1,4 @@
-require 'prelude'
+require_relative 'prelude'
 
 ActiveRecord::Base.logger = Logger.new(STDOUT)
 
