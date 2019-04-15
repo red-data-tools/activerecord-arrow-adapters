@@ -62,7 +62,8 @@ namespace mysql2_arrow {
 
       case MYSQL_TYPE_DECIMAL:
       case MYSQL_TYPE_NEWDECIMAL:
-        *out = std::make_shared<arrow::Decimal128Type>(field_length, field.decimals);
+        *out = std::make_shared<arrow::Decimal128Type>(field_length - 2, // sign + dot
+                                                       field.decimals);
         return Status::OK();
 
       case MYSQL_TYPE_FLOAT:
@@ -100,7 +101,11 @@ namespace mysql2_arrow {
       case MYSQL_TYPE_VAR_STRING:
       case MYSQL_TYPE_VARCHAR:
         // TODO: encoding support
-        *out = arrow::utf8();
+        if ((field.flags & BINARY_FLAG) != 0) {
+          *out = arrow::binary();
+        } else {
+          *out = arrow::utf8();
+        }
         return Status::OK();
 
       case MYSQL_TYPE_TINY_BLOB:
@@ -327,10 +332,13 @@ namespace mysql2_arrow {
 
     Status ProcessBatchField(arrow::Decimal128Builder* builder, const unsigned int i,
                              const std::vector<MYSQL_ROW>& row_batch,
-                             const std::vector<std::vector<unsigned long>>&) {
+                             const std::vector<std::vector<unsigned long>>& field_lengths) {
       const auto n = row_batch.size();
       for (size_t j = 0; j < n; ++j) {
-        RETURN_NOT_OK(builder->Append(arrow::Decimal128(row_batch[j][i])));
+        arrow::Decimal128 value;
+        auto src = arrow::util::string_view(row_batch[j][i], field_lengths[j][i]);
+        RETURN_NOT_OK(arrow::Decimal128::FromString(src, &value));
+        RETURN_NOT_OK(builder->Append(value));
       }
       return Status::OK();
     }
