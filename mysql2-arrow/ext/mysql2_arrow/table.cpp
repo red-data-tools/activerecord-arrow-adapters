@@ -4,6 +4,8 @@
 #include <arrow-glib/error.hpp>
 #include <rbgobject.h>
 
+#include <iostream>
+
 namespace red_arrow {
   extern VALUE cDate;
   extern ID id_BigDecimal;
@@ -636,6 +638,24 @@ namespace red_arrow {
                                    &dictionary_array_value_converter_);
       }
 
+      void build(const arrow::RecordBatch& record_batch) {
+        rb::protect([&] {
+          const auto n_rows = record_batch.num_rows();
+          for (int64_t i = 0; i < n_rows; ++i) {
+            auto record = rb_ary_new_capa(n_columns_);
+            rb_ary_push(records_, record);
+          }
+          row_offset_ = 0;
+          for (int i = 0; i < n_columns_; ++i) {
+            const auto array = record_batch.column(i).get();
+            column_index_ = i;
+            check_status(array->Accept(this),
+                         "[record-batch-raw-records]");
+          }
+          return Qnil;
+        });
+      }
+
       void build(const arrow::Table& table) {
         rb::protect([&] {
           const auto n_rows = table.num_rows();
@@ -647,10 +667,11 @@ namespace red_arrow {
             const auto column = table.column(i).get();
             const auto chunked_array = column->data();
             column_index_ = i;
+            // TODO: should we use array->offset() ?
             row_offset_ = 0;
             for (const auto array : chunked_array->chunks()) {
               check_status(array->Accept(this),
-                           "[raw-records]");
+                           "[table-raw-records]");
               row_offset_ += array->length();
             }
           }
@@ -718,7 +739,7 @@ namespace red_arrow {
             rb_ary_store(record, column_index_, value);
           }
         } else {
-          for (int64_t i = 0, ii = row_offset_; i < n; ++i, ++i) {
+          for (int64_t i = 0, ii = row_offset_; i < n; ++i, ++ii) {
             auto record = rb_ary_entry(records_, ii);
             auto value = convert_value(array, i);
             rb_ary_store(record, column_index_, value);
