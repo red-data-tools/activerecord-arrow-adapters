@@ -83,13 +83,22 @@ module ActiveRecordArrowAdapter
       Hash[columns.zip(rows.last)] # TODO
     end
 
-    def cast_values(type_overrides = {})
-      if type_overrides.empty? || 
-           (column_types == column_types.merge(type_overrides))
-        result = rows
-        columns.one? ? result.map!(:first) : result
+    def cast_values(type_overrides = {}) # :nodoc:
+      types = columns.map { |name| column_type(name, type_overrides) }
+      unless cast_needed?(types)
+        return rows
+      end
+
+      if columns.one?
+        # Separated to avoid allocating an array per row
+        type = types[0]
+        rows.map do |(value)|
+          type.deserialize(value)
+        end
       else
-        super
+        rows.map do |values|
+          Array.new(values.size) { |i| types[i].deserialize(values[i]) }
+        end
       end
     end
 
@@ -121,6 +130,28 @@ module ActiveRecordArrowAdapter
 
       def generate_rows
         @record_batch.raw_records
+      end
+
+      DIRECT_TYPE_MAP = {
+        ActiveRecord::Type::BigInteger => Arrow::IntegerDataType,
+        ActiveRecord::Type::Binary     => Arrow::BinaryDataType,
+        ActiveRecord::Type::Date       => Arrow::Date32DataType,
+        ActiveRecord::Type::DateTime   => Arrow::TimestampDataType,
+        ActiveRecord::Type::Decimal    => Arrow::Decimal128DataType,
+        ActiveRecord::Type::Float      => Arrow::FloatingPointDataType,
+        ActiveRecord::Type::Integer    => Arrow::IntegerDataType,
+        ActiveRecord::Type::Text       => Arrow::BinaryDataType,
+        ActiveRecord::Type::String     => Arrow::StringDataType, # must follows AR::Type::Text
+        ActiveRecord::Type::Time       => Arrow::TimestampDataType
+      }.freeze
+
+      def cast_needed?(types)
+        arrow_fields = @record_batch.schema.fields
+        !types.each_with_index.all? { |type, i|
+          DIRECT_TYPE_MAP.any? { |ar_type, arrow_type|
+            type.is_a?(ar_type) && arrow_fields[i].data_type.is_a?(arrow_type)
+          }
+        }
       end
   end
 end
