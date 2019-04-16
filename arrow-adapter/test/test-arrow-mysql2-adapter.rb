@@ -36,14 +36,18 @@ class ArrowMysql2AdapterTest < Test::Unit::TestCase
   end
 
   sub_test_case('.select_all') do
-    test('default') do
-      assert_kind_of(ActiveRecordArrowAdapter::ArrowResult,
-                     @connection.select_all(@query_statement))
+    test('with_arrow(true)') do
+      @connection.with_arrow(true) do
+        assert_kind_of(ActiveRecordArrowAdapter::ArrowResult,
+                       @connection.select_all(@query_statement))
+      end
     end
 
-    test('use_arrow: false') do
-      assert_kind_of(ActiveRecord::Result,
-                     @connection.select_all(@query_statement, use_arrow: false))
+    test('with_arrow(false)') do
+      @connection.with_arrow(false) do
+        assert_kind_of(ActiveRecord::Result,
+                       @connection.select_all(@query_statement))
+      end
     end
   end
 end
